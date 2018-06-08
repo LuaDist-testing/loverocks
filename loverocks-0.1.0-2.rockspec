@@ -1,10 +1,10 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "loverocks"
-version = "0.1.0-1"
+version = "0.1.0-2"
 -- LuaDist source
 source = {
-  tag = "0.1.0-1",
+  tag = "0.1.0-2",
   url = "git://github.com/LuaDist-testing/loverocks.git"
 }
 -- Original source
@@ -25,10 +25,10 @@ so your entire LÖVE project is self-contained.
 }
 dependencies = {
    "lua ~> 5.1",
-   "etlua ~> 1.2",
+   "etlua ~> 1.3",
    "luafilesystem ~> 1.6",
    "argparse ~> 0.5",
-   "loadconf ~> 0.2"
+   "loadconf ~> 0.3"
 }
 build = {
    type = "builtin",
