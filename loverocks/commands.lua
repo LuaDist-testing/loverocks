@@ -4,11 +4,12 @@ local cnames = {
 	"new",
 	"init",
 	"install",
+	"deps",
 	"list",
 	"search",
 	"purge",
-	"lua",
 	"help",
+	"pack",
 }
 
 local commands = {}
