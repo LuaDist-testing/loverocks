@@ -1,17 +1,9 @@
--- This file was automatically generated for the LuaDist project.
-
 package = "loverocks"
-version = "0.2.0-1"
--- LuaDist source
+version = "0.2.1-1"
 source = {
-  tag = "0.2.0-1",
-  url = "git://github.com/LuaDist-testing/loverocks.git"
+   url = "git://github.com/Alloyed/loverocks",
+   tag = "v0.2.1"
 }
--- Original source
--- source = {
---    url = "git://github.com/Alloyed/loverocks",
---    tag = "v0.2.0"
--- }
 description = {
    summary = "A luarocks <-> love wrapper",
    detailed = [[
@@ -27,7 +19,7 @@ dependencies = {
    "lua ~> 5.1",
    "etlua ~> 1.3",
    "argparse ~> 0.5",
-   "loadconf >= 0.3.3, < 0.4"
+   "loadconf >= 0.3.4, < 0.4"
 }
 build = {
    type = "builtin",
