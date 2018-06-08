@@ -1,6 +1,8 @@
-local fs = require 'luarocks.fs'
-local T   = require 'loverocks.schema'
-local log = require 'loverocks.log'
+local lfs      = require 'lfs'
+local datafile = require 'datafile'
+
+local log    = require 'loverocks.log'
+local config = require 'loverocks.config'
 
 local util = {}
 
@@ -15,35 +17,35 @@ end
 local function slurp_dir(dir)
 	local t = {}
 
-	for f in fs.dir(dir) do
-		t[f] = assert(util.slurp(dir .. "/" .. f))
+	for f in lfs.dir(dir) do
+		if f ~= "." and f  ~= ".." then
+			t[f] = util.slurp(dir .. "/" .. f)
+		end
 	end
 
 	return t
 end
 
 function util.slurp(path)
-	T(path, 'string')
-
-	if fs.is_dir(path) then
+	local ftype, err = lfs.attributes(path, 'mode')
+	if ftype == 'directory' then
 		return slurp_dir(path)
-	elseif fs.is_file(path) then
+	elseif ftype then
 		return slurp_file(path)
 	else
-		return nil, 'The path provided is neither a directory nor a file'
+		return nil, err
 	end
 end
 
 local function spit_file(str, dest)
-	local file, ok, err
-	log:fs("spit %s", dest)
-	file, err = io.open(dest, "w")
+	log:fs("spit  %s", dest)
+	local file, err = io.open(dest, "w")
 	if not file then return nil, err end
 
-	ok, err = file:write(str)
+	local ok, err = file:write()
 	if not ok then return nil, err end
 
-	ok, err = file:close()
+	local ok, err = file:close()
 	if not ok then return nil, err end
 
 	return true
@@ -51,13 +53,11 @@ end
 
 local function spit_dir(tbl, dest)
 	log:fs("mkdir %s", dest)
-	if not fs.is_dir(dest) then
-		local ok, err = fs.make_dir(dest)
-		if not ok then return nil, err end
-	end
+	local ok, err = lfs.mkdir(dest)
+	if not ok then return nil, err end
 
 	for f, s in pairs(tbl) do
-		if f ~= "." and f ~= ".." then
+		if f ~= "." and f  ~= ".." then
 			local ok, err = util.spit(s, dest .. "/" .. f)
 			if not ok then return nil, err end
 		end
@@ -68,32 +68,87 @@ end
 
 -- Keep getting the argument order mixed up
 function util.spit(o, dest)
-	T(o, T.sum('table', 'string'))
-	T(dest, 'string')
-
 	if type(o) == 'table' then
 		return spit_dir(o, dest)
 	else
-		return assert(spit_file(o, dest))
+		return spit_file(o, dest)
 	end
 end
 
-function util.get_home()
-	return (os.getenv("HOME") or os.getenv("USERPROFILE"))
+function util.rm(path)
+	log:fs("rm -r %s", path)
+	local ftype, err = lfs.attributes(path, 'mode')
+	if not ftype then return nil, err end
+
+	if ftype == 'directory' then
+		for f in lfs.dir(path) do
+			if f ~= "." and f  ~= ".." then
+				local fp = path .. "/" .. f
+				local ok, err = util.rm(fp)
+				if not ok then return nil, err end
+			end
+		end
+	end
+
+	return os.remove(path)
 end
 
-function util.clean_path(path)
-	T(path, 'string')
+-- a replacement datafile.path()
+function util.dpath(resource)
+	-- for some reason datafile.path doesn't work
+	local tmpfile, path = datafile.open(resource)
+	local err = path
 
-	if path:match("^%~/") then
-		path = path:gsub("^%~/", util.get_home() .. "/")
+	if not tmpfile then
+		return nil, err
 	end
-	if not path:match("^/") and   -- /my-file
-	   not path:match("^%./") and -- ./my-file
-	   not path:match("^%a:") then -- C:\my-file
-		path = fs.current_dir() .. "/" .. path
-	end
+	tmpfile:close()
+
 	return path
+end
+
+-- get first file matching pat
+function util.get_first(path, pat)
+	local ftype = lfs.attributes(path, 'mode')
+	assert(ftype == 'directory', tostring(path) .. " is not a directory")
+	for f in lfs.dir(path) do
+		if f:match(pat) then
+			return f
+		end
+	end
+	return nil, "Not found"
+end
+
+-- like io.popen, but returns a string instead of a file
+function util.stropen(cli)
+	local f = io.popen(cli, 'r')
+	local s = f:read('*a')
+	f:close()
+	return s
+end
+
+local LROCKSTR = [[
+LUAROCKS_CONFIG='rocks/config.lua' %s --tree='rocks' %s
+]]
+function util.luarocks(...)
+	local argstr = table.concat({...}, " ")
+	argstr = LROCKSTR:format(config('luarocks'), argstr)
+	log:fs(argstr)
+
+	return os.execute(argstr)
+end
+
+function util.strluarocks(...)
+	local argstr = table.concat({...}, " ")
+	argstr = LROCKSTR:format(config('luarocks'), argstr)
+	log:fs(argstr)
+
+	return util.stropen(argstr)
+end
+
+-- produce str with magic characters escaped, for pattern-building
+function util.escape_str(s)
+    return (s:gsub('[%-%.%+%[%]%(%)%$%^%%%?%*]','%%%1'))
 end
 
 return util
