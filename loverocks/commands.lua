@@ -2,14 +2,15 @@ local mod = ...
 
 local cnames = {
 	"new",
-	"init",
 	"install",
+	"remove",
 	"deps",
 	"list",
 	"search",
 	"purge",
 	"help",
-	"pack",
+	"modules",
+	"path",
 }
 
 local commands = {}

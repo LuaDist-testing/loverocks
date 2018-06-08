@@ -1,15 +1,17 @@
 local log = require 'loverocks.log'
 local template = require 'loverocks.template'
 local util = require 'loverocks.util'
+local love_versions = require 'loverocks.love-versions'
 
 local new = {}
 
-function new:build(parser)
+function new.build(parser)
 	parser:description "Make a new love project"
 
 	parser:option "-t" "--template"
 		:description "The template to follow."
-		:default "love9"
+		:default "love"
+
 	parser:option "--love-version"
 		:description "The lua version. If unspecified we guess by running `love --version`"
 
@@ -18,15 +20,9 @@ function new:build(parser)
 		:description "the name of the project"
 end
 
-function is_valid_name(s) -- TODO
-	return true
-end
-
-function new:run(args)
-	local env = template.new_env(args.project, args.love_version)
-	if not is_valid_name(args.project) then
-		log:error("Invalid project name: %q", args.project)
-	end
+function new.run(args)
+	local versions = love_versions.get(args.love_version)
+	local env = template.new_env(versions, args.project)
 
 	local path = log:assert(template.path(args.template))
 
@@ -34,7 +30,7 @@ function new:run(args)
 	local files = assert(util.slurp(path))
 	files = template.apply(files, env)
 
-	local f, err = io.open(env.project_name)
+	local f = io.open(env.project_name)
 	if f then
 		local should_overwrite = log:ask(
 			"Directory %q already exists! overwrite (Y/n)?",

@@ -1,48 +1,20 @@
 ----------------------
--- A well defined API for using luarocks.
--- This allows you to query the existing packages (@{show} and @{list}) and
--- packages on a remote repository (@{search}). Like the luarocks command-line
--- tool, you can specify the flags `from` and `only_from` for this function.
---
--- Local information is a table: @{local_info_table}.  Usually you get less
--- information for remote queries (basically, package, version and repo) but
--- setting the  flag `details` for @{search} will fill in more fields by
--- downloading the remote rockspecs - bear in mind that this can be slow for
--- large queries.
---
+-- A butchering of
+-- https://git.io/vuFYa
+-- used to call luarocks functions within a contained sandbox.
+-- FIXME: this is a total mess
 -- @author Steve Donovan
 -- @license MIT/X11
 
 local api = {}
 
-local util = require("luarocks.util")
-local _search = require("luarocks.search")
-local deps = require("luarocks.deps")
-local manif = require("luarocks.manif")
-local manif_core = require("luarocks.manif_core")
-local fetch = require("luarocks.fetch")
-local _install = require("luarocks.install")
-local build = require("luarocks.build")
-local fs = require("luarocks.fs")
-local path = require("luarocks.path")
-local dir = require("luarocks.dir")
-local _remove = require("luarocks.remove")
-local purge = require("luarocks.purge")
-local list = require("luarocks.list")
+local lfs = require 'lfs'
 
+local T = require 'loverocks.schema'
 local log = require 'loverocks.log'
-local lcfg = require 'loverocks.config'
+local template = require 'loverocks.template'
+local util = require 'loverocks.util'
 local versions = require 'loverocks.love-versions'
-
-local function version_iter (versions)
-	return util.sortedpairs(versions, deps.compare_versions)
-end
-
-local function _latest(versions, first_repo)
-	local version, repos = version_iter(versions)()
-	local repo = repos[first_repo and 1 or #repos]
-	return version, repo.repo
-end
 
 local function copy(t, into)
 	for k, v in pairs(t) do
@@ -55,26 +27,23 @@ local function copy(t, into)
 	end
 end
 
--- cool, let's initialize this baby. This is normally done by command_line.lua
--- Since cfg is a singleton, api has to be one too. So it goes.
-local cfg = require("luarocks.cfg")
+local function use_tree(root, tree_name)
+	T(root,      'string')
+	T(tree_name, 'string')
 
-function api.apply_config(new)
-	-- idea: instead of copying-in, we make package.preload["luarocks.cfg"]
-	-- a mock table, and then push in and out prototypes to apply the config.
-	copy(new, cfg)
+	local cfg = require 'luarocks.cfg'
+	local path = require("luarocks.path")
+
+	cfg.root_dir = root
+	cfg.rocks_dir = path.rocks_dir(root)
+	cfg.rocks_trees = { tree_name }
+	cfg.deploy_bin_dir = path.deploy_bin_dir(root)
+	cfg.deploy_lua_dir = path.deploy_lua_dir(root)
+	cfg.deploy_lib_dir = path.deploy_lib_dir(root)
 end
 
-local function use_tree(tree)
-	cfg.root_dir = tree
-	cfg.rocks_dir = path.rocks_dir(tree)
-	cfg.rocks_trees = { "rocks" }
-	cfg.deploy_bin_dir = path.deploy_bin_dir(tree)
-	cfg.deploy_lua_dir = path.deploy_lua_dir(tree)
-	cfg.deploy_lib_dir = path.deploy_lib_dir(tree)
-end
-
-local old_printout, old_printerr = util.printout, util.printerr
+local Lutil = require 'luarocks.util'
+local old_printout, old_printerr = Lutil.printout, Lutil.printerr
 local path_sep = package.config:sub(1, 1)
 
 function q_printout(...)
@@ -85,159 +54,155 @@ function q_printerr(...)
 	log:_warning("L: %s", table.concat({...}, "\t"))
 end
 
+local function version_gt(a, b)
+	T(a, 'string')
+	T(b, 'string')
+	-- Don't worry about it. 100 versions are enough for anybody :^)
+	local a_maj, a_min, a_patch, a_rock = a:match("^(%d+)%.(%d+)%.(%d+)-(%d+)")
+	local an = a_maj * 1e8 + a_min * 1e4 + a_patch * 1e2 + a_rock
+
+	local b_maj, b_min, b_patch, b_rock = b:match("^(%d+)%.(%d+)%.(%d+)-(%d+)")
+	local bn = b_maj * 1e8 + b_min * 1e4 + b_patch * 1e2 + b_rock
+
+	return an > bn
+end
+
+local function old_init_file(rocks_tree)
+	local fname = rocks_tree .. "/init.lua"
+
+	if util.is_file(fname) then
+		local body = log:assert(util.slurp(fname))
+		for field in body:gmatch("%b||") do
+			field = field:sub(2, -2)
+			old_ver = field:match("^version: (%d+%.%d+%.%d+-%d+)") 
+			if old_ver then
+				if version_gt(require'loverocks.version', old_ver) then
+					return true -- our version is newer, update
+				else
+					return false -- our version is same or lower, don't update
+				end
+			end
+		end
+	end
+	log:error([[
+Couldn't recognize rocks tree %q.
+This can happen when upgrading from an older version of LOVERocks,
+in which case it's safe to delete the old directory.
+Please rename or remove and try again.]], rocks_tree)
+end
+
+local function reinstall_tree(rocks_tree, provided)
+	local env = template.new_env(provided)
+	local path = log:assert(template.path('love/rocks'))
+	local files = assert(util.slurp(path))
+	files = template.apply(files, env)
+	assert(util.spit(files, rocks_tree))
+end
+
+local function init_rocks(rocks_tree, provided)
+	if not util.is_dir(rocks_tree) then
+		log:info("Rocks tree %q not found, reinstalling.", rocks_tree)
+		reinstall_tree(rocks_tree, provided)
+		return true
+	elseif old_init_file(rocks_tree) then
+		log:info("Rocks tree %q is outdated, upgrading.", rocks_tree)
+		reinstall_tree(rocks_tree, provided)
+		return true
+	end
+
+	return false
+end
+
 local project_cfg = nil
 local cwd = nil
-local function check_flags (flags)
+local function check_flags(flags)
+	T(flags, 'table')
+
+	local rocks_tree = flags.tree or "rocks"
+	T(rocks_tree, 'string')
+
+	local cfg = require("luarocks.cfg")
+	local util = require("luarocks.util")
+	local manif_core = require("luarocks.manif_core")
+
+	local fs = require("luarocks.fs")
+	local path = require("luarocks.path")
+
 	cwd = fs.current_dir()
-	use_tree(cwd .. "/rocks")
+	use_tree(cwd .. "/" .. rocks_tree, rocks_tree)
 	if not project_cfg then
 		project_cfg = {}
-		lcfg.open(cwd .. "/rocks/config.lua", project_cfg)
-		versions.add_version_info(cwd .. "/conf.lua", project_cfg)
-		api.apply_config(project_cfg)
+		local provided = versions.get(flags.version)
+		project_cfg.rocks_provided = provided
+		init_rocks(rocks_tree, provided)
+		copy(project_cfg, cfg)
 	end
 
 	manif_core.manifest_cache = {} -- clear cache
 	flags._old_servers = cfg.rocks_servers
-	if flags.from then
-		table.insert(cfg.rocks_servers, 1, flags.from)
-	elseif flags.only_from then
+	if flags.only_from then
+		T(flags.only_from, 'string')
 		cfg.rocks_servers = { flags.only_from }
+	elseif flags.from then
+		T(flags.from, T.all('string'))
+		for i=#flags.from, 1, -1 do
+			table.insert(cfg.rocks_servers, 1, flags.from[i])
+		end
 	end
 	util.printout = q_printout
 	util.printerr = q_printerr
 end
 
-local function restore_flags (flags)
-	assert(lfs.chdir(cwd))
-	if flags.from then
-		table.remove(cfg.rocks_servers, 1)
-	elseif flags.only_from then
-		cfg.rocks = flags._old_servers
+api.check_flags = check_flags
+
+local function make_env(flags)
+	local env = setmetatable({}, {__index = _G})
+	env._G = env
+	env.package = setmetatable({}, {__index = package})
+	env.check_flags = check_flags
+	env.flags = flags
+	env.T = T -- TODO: remove
+
+	env.package.loaded = {
+		string = string,
+		debug = debug,
+		package = env.package,
+		_G = env,
+		io = io,
+		os = os,
+		table = table,
+		math = math,
+		coroutine = coroutine,
+	}
+	return env
+end
+
+function api.in_luarocks(flags, f)
+	local env = make_env(flags)
+	local function lr()
+		check_flags(flags)
+		return f()
 	end
-	util.printout = old_printout
-	util.printerr = old_printerr
+	setfenv(lr, env)
+
+	return lr()
 end
 
---- show information about an installed package.
--- @param name the package name
--- @param version version, may be nil
--- @param field one of the output fields
--- @return @{local_info_table}, or a string if field is specified.
--- @see show.lua
-function api.show(name, version, field)
-	local res, err = list (name, version, {exact = true})
-	if not res then return nil, err end
-	res = res[1]
-	if field then return res[field]
-	else return res
-	end
-end
+-- 
+function api.make_flags(conf)
+	conf = conf or {}
+	local t = {
+		tree    = conf.rocks_tree,
+		version = conf.version,
+		from    = {}
+	}
 
---- list information about currently installed packages.
--- @param pattern a string which is partially matched against packages
--- @param version a specific version, may be nil.
--- @param flags @{flags}
--- @return list of @{local_info_table}
-function api.list(pattern, version, flags)
-	flags = flags or {}
-	check_flags(flags)
-
-	local f = {pattern, version}
-	if flags.outdated then
-		table.insert(f, "--outdated")
-	end
-	if flags.porcelain then
-		table.insert(f, "--porcelain")
-	end
-
-	log:fs("luarocks list %s", table.concat(f, " "))
-	local ok, err = list.run(unpack(f))
-	restore_flags(flags)
-	return ok, err
-end
-
---- is this package outdated?.
--- @{check.lua} shows how to compare installed and available packages.
--- @param linfo local info table
--- @param info server info table
--- @return true if the package is out of date.
-function api.compare_versions (linfo, info)
-	return deps.compare_versions(info.version, linfo.version)
-end
-
-
---- install a rock.
--- @param name
--- @param version can ask for a specific version (default nil means get latest)
--- @param flags @{flags} `use_local` to install to local tree,
--- `from` to add another repository to the search and `only_from` to only use
--- the given repository
--- @return true if successful, nil if not.
--- @return error message if not
-function api.install(name, version, flags)
-	flags = flags or {}
-	check_flags(flags)
-
-	log:fs("luarocks install %s %s", name or "", version or "")
-	local ok, err = _install.run(name, version)
-	restore_flags(flags)
-	return ok, err
-end
-
---- remove a rock.
--- @param name
--- @param version a specific version (default nil means remove all)
-function api.remove(name, version, flags)
-	flags = flags or {}
-	check_flags(flags)
-
-	log:fs("luarocks remove %s %s", name, version)
-	local ok, err = _remove.run(name, version)
-	restore_flags(flags)
-	return ok, err
-end
-
---- Build a rock.
--- @param name
--- @param version
--- @param flags @{flags}
--- @return true if successful, nil if not
--- @return error message if not
-function api.build(name, version, flags)
-	flags = flags or {}
-	check_flags(flags)
-	local f = {}
-	if version then table.insert(f, version) end
-	if flags.only_deps then table.insert(f, "--only-deps") end
-
-	log:fs("luarocks build %s %s", name, table.concat(f, " "))
-	local ok, err = build.run(name, unpack(f))
-	restore_flags(flags)
-	return ok, err
-end
-
---- Purge the loverocks tree
-function api.purge(flags)
-	flags = flags or {}
-	check_flags(flags)
-
-	local f = {}
-	table.insert(f, ("--tree=%s"):format("rocks"))
-
-	if flags.only_deps then
-		table.insert(f, "--only-deps")
+	if conf.rocks_servers then
+		T(conf.rocks_servers, T.all('string'))
+		t.from = conf.rocks_servers
 	end
 
-	if flags.force then
-		table.insert(f, "--force")
-	end
-
-	log:fs("luarocks purge")
-	local ok, err = purge.run(unpack(f))
-
-	restore_flags(flags)
-	return ok, err
+	return t
 end
 
 return api

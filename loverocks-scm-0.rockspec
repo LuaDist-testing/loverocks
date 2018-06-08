@@ -16,34 +16,36 @@ so your entire LÖVE project is self-contained.
 }
 dependencies = {
    "lua ~> 5.1",
-   -- "luarocks >= 2.2.2", Doesn't work on windows
+   -- "luarocks >= 2.2, < 2.4", Doesn't work on windows
    "etlua ~> 1.2",
    "luafilesystem ~> 1.6",
    "datafile >= 0.2",
-   "argparse >= 0.4"
+   "argparse ~> 0.5",
+   "loadconf ~> 0.1"
 }
 build = {
    type = "builtin",
    modules = {
       ["loverocks.main"]             = "loverocks/main.lua",
+      ["loverocks.log"]              = "loverocks/log.lua",
       ["loverocks.version"]          = "loverocks/version.lua",
       ["loverocks.util"]             = "loverocks/util.lua",
-      ["loverocks.log"]              = "loverocks/log.lua",
-      ["loverocks.love-versions"]    = "loverocks/love-versions.lua",
-      ["loverocks.config"]           = "loverocks/config.lua",
-      ["loverocks.template"]         = "loverocks/template.lua",
       ["loverocks.commands"]         = "loverocks/commands.lua",
-      ["loverocks.commands.init"]    = "loverocks/commands/init.lua",
-      ["loverocks.commands.new"]     = "loverocks/commands/new.lua",
-      ["loverocks.commands.install"] = "loverocks/commands/install.lua",
-      ["loverocks.commands.deps"]    = "loverocks/commands/deps.lua",
-      ["loverocks.commands.help"]    = "loverocks/commands/help.lua",
-      ["loverocks.commands.list"]    = "loverocks/commands/list.lua",
+      ["loverocks.commands.path"]    = "loverocks/commands/path.lua",
       ["loverocks.commands.purge"]   = "loverocks/commands/purge.lua",
       ["loverocks.commands.search"]  = "loverocks/commands/search.lua",
-      ["loverocks.commands.pack"]    = "loverocks/commands/pack.lua",
-      ["loverocks.argparse"]         = "loverocks/argparse.lua",
+      ["loverocks.commands.list"]    = "loverocks/commands/list.lua",
+      ["loverocks.commands.install"] = "loverocks/commands/install.lua",
+      ["loverocks.commands.help"]    = "loverocks/commands/help.lua",
+      ["loverocks.commands.new"]     = "loverocks/commands/new.lua",
+      ["loverocks.commands.modules"] = "loverocks/commands/modules.lua",
+      ["loverocks.commands.remove"]  = "loverocks/commands/remove.lua",
+      ["loverocks.commands.deps"]    = "loverocks/commands/deps.lua",
       ["loverocks.api"]              = "loverocks/api.lua",
+      ["loverocks.schema"]           = "loverocks/schema.lua",
+      ["loverocks.love-versions"]    = "loverocks/love-versions.lua",
+      ["loverocks.template"]         = "loverocks/template.lua",
+      ["loverocks.module_data"]      = "loverocks/module_data.lua",
    },
    install = {
       bin = {"bin/loverocks"}
