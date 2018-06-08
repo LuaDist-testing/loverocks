@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "loverocks"
-version = "0.0.6-1"
+version = "0.0.6-2"
 -- LuaDist source
 source = {
-  tag = "0.0.6-1",
+  tag = "0.0.6-2",
   url = "git://github.com/LuaDist-testing/loverocks.git"
 }
 -- Original source
 -- source = {
 --    url = "git://github.com/Alloyed/loverocks",
---    tag = "v0.0.6"
+--    tag = "v0.0.6-2"
 -- }
 description = {
    summary = "A luarocks <-> love wrapper",
@@ -24,11 +24,7 @@ so your entire LÖVE project is self-contained.
    license = "MIT"
 }
 dependencies = {
-   "lua ~> 5.1",
-   "etlua ~> 1.2",
-   "luafilesystem ~> 1.6",
-   "datafile >= 0.2",
-   "argparse >= 0.4"
+   "lua ~> 5.1", "etlua ~> 1.2", "luafilesystem ~> 1.6", "datafile >= 0.2", "argparse >= 0.4"
 }
 build = {
    type = "builtin",
