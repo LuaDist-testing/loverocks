@@ -1,15 +1,15 @@
-local util = require 'loverocks.util'
-local lfs  = require 'lfs'
-local New = require 'loverocks.commands.new'
+require 'spec.test_config'()
+local util  = require 'spec.util'
+local lfs   = require 'lfs'
+local New   = require 'loverocks.commands.new'
 
 describe("loverocks new", function()
-	require 'spec.test_config'()
 	setup(function()
-		New.run {
+		New.run(nil, {
 			project      = "my-project",
 			template     = "love",
 			love_version = "0.9.2",
-		}
+		})
 	end)
 
 	teardown(function()
@@ -31,11 +31,11 @@ describe("loverocks new", function()
 		finally(function() assert(util.rm("my-projectB")) end)
 		assert(util.rm("my-project"))
 
-		New.run {
+		New.run(nil, {
 			project      = "my-project",
 			template     = "love",
 			love_version = "0.9.2",
-		}
+		})
 
 		assert.same(util.slurp("my-project"), util.slurp("my-projectB"))
 	end)
@@ -43,24 +43,12 @@ end)
 
 describe("loverocks new parser", function()
 	local argparse = require 'argparse'
-	local parser
-	setup(function()
-		parser = argparse()
-		function parser:error(msg)
-			local log = require 'loverocks.log'
-			log:_warning(self:get_usage().."\n")
-			log:error("%s", msg)
-		end
-		New.build(parser)
-	end)
+	local parser = argparse()
+	New.build(parser)
 
 	it("errors on empty args", function()
-		require('loverocks.log').use.error = false
-		finally(function() require('loverocks.log').use.error = true end)
 
-		assert.has_errors(function()
-			return parser:parse{}
-		end)
+		assert.falsy((parser:pparse{}))
 	end)
 
 	it("passes in project files", function()

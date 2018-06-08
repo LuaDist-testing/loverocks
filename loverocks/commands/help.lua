@@ -14,15 +14,15 @@ function help.build(parser)
 		:description "the command to look up the help for"
 end
 
-function help.run(args)
+function help.run(_, args)
 	if args.command then
 		local parser = help.commands[args.command]
 		if not parser then
 			log:error("no such command %s", args.command)
 		end
-		print(parser:get_help())
+		io.write(parser:get_help().."\n")
 	else
-		print(help.commands.main:get_help())
+		io.write(help.commands.main:get_help().."\n")
 	end
 end
 

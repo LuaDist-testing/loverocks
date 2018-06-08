@@ -1,13 +1,18 @@
 local argparse = require 'argparse'
 local commands = require 'loverocks.commands'
+local loadconf = require 'loverocks.loadconf'
 local log      = require 'loverocks.log'
+local luarocks = require 'loverocks.luarocks'
 
 local function main(...)
 	local fullname = "Loverocks " .. (require 'loverocks.version')
-	local desc = "%s, a wrapper to make luarocks and love play nicely."
+	local lr_version = luarocks.version()
+	assert(lr_version)
+	local lr_name = "Luarocks " .. tostring(lr_version)
+	local desc = "%s, a wrapper to make %s and LOVE play nicely."
 
 	local parser = argparse "loverocks" {
-		description = string.format(desc, fullname),
+		description = string.format(desc, fullname, lr_name),
 	}
 	parser:command_target("cmd")
 	local help = commands.modules.help
@@ -24,7 +29,7 @@ local function main(...)
 	parser:flag "--version"
 		:description "Print version info."
 		:action(function()
-			print(fullname)
+			io.write(fullname .. "\n" .. lr_name .. "\n")
 			os.exit(0)
 		end)
 	parser:flag "-v" "--verbose"
@@ -42,9 +47,13 @@ local function main(...)
 		:action(function()
 			log.use.ask = false
 		end)
+	parser:option "--game" "-g"
+		:description "Manage the game represented by this file/folder."
 
 	local B = parser:parse{...}
-	return commands.modules[B.cmd].run(B)
+	local conf = log:assert(loadconf.require(B.game))
+
+	return commands.modules[B.cmd].run(conf, B)
 end
 
 return main

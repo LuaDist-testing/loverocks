@@ -19,9 +19,8 @@ dependencies = {
    -- "luarocks >= 2.2, < 2.4", Doesn't work on windows
    "etlua ~> 1.2",
    "luafilesystem ~> 1.6",
-   "datafile >= 0.2",
    "argparse ~> 0.5",
-   "loadconf ~> 0.1"
+   "loadconf ~> 0.2"
 }
 build = {
    type = "builtin",
@@ -41,17 +40,18 @@ build = {
       ["loverocks.commands.modules"] = "loverocks/commands/modules.lua",
       ["loverocks.commands.remove"]  = "loverocks/commands/remove.lua",
       ["loverocks.commands.deps"]    = "loverocks/commands/deps.lua",
+      ["loverocks.luarocks"]         = "loverocks/luarocks.lua",
       ["loverocks.api"]              = "loverocks/api.lua",
       ["loverocks.schema"]           = "loverocks/schema.lua",
       ["loverocks.love-versions"]    = "loverocks/love-versions.lua",
       ["loverocks.template"]         = "loverocks/template.lua",
+      ["loverocks.templates.love"]   = "loverocks/templates/love.lua",
       ["loverocks.module_data"]      = "loverocks/module_data.lua",
+      ["loverocks.loadconf"]         = "loverocks/loadconf.lua",
+      ["loverocks.unzip"]            = "loverocks/unzip.lua",
    },
    install = {
       bin = {"bin/loverocks"}
-   },
-   copy_directories = {
-      "templates",
    },
    platforms = {
       unix = {

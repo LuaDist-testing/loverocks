@@ -1,31 +1,11 @@
-local lfs    = require 'lfs'
+require 'spec.test_config'()
 
-local util   = require 'loverocks.util'
-local purge  = require 'loverocks.commands.purge'
-
-local cwd = lfs.currentdir()
-describe("loverocks install", function()
-	local Install = require 'loverocks.commands.install'
-	require 'spec.test_config'()
-	setup(function()
-		local New = require 'loverocks.commands.new'
-		New.run {
-			project      = "my-project",
-			template     = "love",
-			love_version = "0.9.2",
-		}
-		lfs.chdir("my-project")
-	end)
-
-	teardown(function()
-		lfs.chdir(cwd)
-		assert(util.rm("my-project"))
-	end)
-
-	it("parses command line arguments correctly", function()
+describe("install.build", function()
+	local install = require 'loverocks.commands.install'
+	it("works", function()
 		local argparse = require 'argparse'
 		local parser = argparse()
-		Install.build(parser)
+		install.build(parser)
 
 		assert.same(
 			{packages = {'inspect'}},
@@ -51,47 +31,49 @@ describe("loverocks install", function()
 			{packages = {'inspect'}, server = 'wat'},
 			parser:parse{'inspect', '-s', 'wat'})
 	end)
+end)
+
+describe("loverocks install", function()
+	local install = require 'loverocks.commands.install'
+	local purge = require 'loverocks.commands.purge'
+
+	require 'spec.env'.setup()
 
 	it("Can install normal rocks", function()
-		finally(function()
-			purge.run()
-		end)
-		Install.run {
+		install.run(conf, {
 			packages = {"inspect"},
 			only_server = cwd .. "/test-repo"
-		}
-		assert.equal(type(loadfile("rocks/share/lua/5.1/inspect.lua")()), 'table')
+		})
+		local mod = loadfile("rocks/share/lua/5.1/inspect.lua")
+		assert.equal('table', type(mod()))
 	end)
 
 	it("can install to custom rocks trees", function()
-		finally(function()
-			purge.run()
-		end)
-
-		util.spit([[ function love.conf(t) 
-			t.rocks_tree = "foobar"
-		end ]], "conf.lua")
-
-		Install.run {
+		conf.rocks_tree = "foobar"
+		install.run(conf, {
 			packages = {"inspect"},
 			only_server = cwd .. "/test-repo"
-		}
-		assert.equal(type(loadfile("foobar/share/lua/5.1/inspect.lua")()), 'table')
+		})
+		local mod = loadfile("foobar/share/lua/5.1/inspect.lua")
+		assert.equal('table', type(mod()))
 	end)
 
 	it("can use custom rocks servers", function()
-		finally(function()
-			purge.run()
-		end)
+		conf.rocks_servers = { cwd .. "/test-repo" }
+		install.run(conf, {
+			packages = {"cpml"},
+		})
+		assert.equal('table', type(loadfile("rocks/share/lua/5.1/cpml/modules/vec2.lua")()))
+	end)
 
-		util.spit(string.format([[ function love.conf(t) 
-			t.rocks_servers = {%q}
-		end ]], cwd.."/test-repo"), "conf.lua")
+	it("can install dependencies of a rock", function()
+		install.run(conf, {
+			packages = {"love3d"},
+			only_deps = true,
+			only_server = cwd .. "/test-repo"
+		})
 
-		-- FIXME: use a package not available from luarocks.org
-		Install.run {
-			packages = {"inspect"},
-		}
-		assert.equal(type(loadfile("rocks/share/lua/5.1/inspect.lua")()), 'table')
+		assert.equal('nil', type(loadfile("rocks/share/lua/5.1/love3d/init.lua")))
+		assert.equal('table', type(loadfile("rocks/share/lua/5.1/cpml/modules/vec2.lua")()))
 	end)
 end)

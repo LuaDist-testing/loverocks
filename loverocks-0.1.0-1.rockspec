@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "loverocks"
-version = "0.0.8-1"
+version = "0.1.0-1"
 -- LuaDist source
 source = {
-  tag = "0.0.8-1",
+  tag = "0.1.0-1",
   url = "git://github.com/LuaDist-testing/loverocks.git"
 }
 -- Original source
 -- source = {
 --    url = "git://github.com/Alloyed/loverocks",
---    tag = "v0.0.8"
+--    tag = "v0.1.0"
 -- }
 description = {
    summary = "A luarocks <-> love wrapper",
@@ -24,7 +24,11 @@ so your entire LÖVE project is self-contained.
    license = "MIT"
 }
 dependencies = {
-   "lua ~> 5.1", "etlua ~> 1.2", "luafilesystem ~> 1.6", "datafile >= 0.2", "argparse ~> 0.5", "loadconf ~> 0.1"
+   "lua ~> 5.1",
+   "etlua ~> 1.2",
+   "luafilesystem ~> 1.6",
+   "argparse ~> 0.5",
+   "loadconf ~> 0.2"
 }
 build = {
    type = "builtin",
@@ -41,17 +45,18 @@ build = {
       ["loverocks.commands.purge"] = "loverocks/commands/purge.lua",
       ["loverocks.commands.remove"] = "loverocks/commands/remove.lua",
       ["loverocks.commands.search"] = "loverocks/commands/search.lua",
+      ["loverocks.loadconf"] = "loverocks/loadconf.lua",
       ["loverocks.log"] = "loverocks/log.lua",
       ["loverocks.love-versions"] = "loverocks/love-versions.lua",
+      ["loverocks.luarocks"] = "loverocks/luarocks.lua",
       ["loverocks.main"] = "loverocks/main.lua",
       ["loverocks.module_data"] = "loverocks/module_data.lua",
       ["loverocks.schema"] = "loverocks/schema.lua",
       ["loverocks.template"] = "loverocks/template.lua",
+      ["loverocks.templates.love"] = "loverocks/templates/love.lua",
+      ["loverocks.unzip"] = "loverocks/unzip.lua",
       ["loverocks.util"] = "loverocks/util.lua",
       ["loverocks.version"] = "loverocks/version.lua"
-   },
-   copy_directories = {
-      "templates"
    },
    platforms = {
       unix = {
@@ -71,4 +76,3 @@ build = {
       }
    }
 }
--- MOVE tag = "v0.0.8"
