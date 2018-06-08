@@ -1,7 +1,8 @@
 package = "loverocks"
-version = "scm-0"
+version = "0.0.5-1"
 source = {
-   url = "git://github.com/Alloyed/loverocks"
+   url = "git://github.com/Alloyed/loverocks",
+   tag = "v0.0.5"
 }
 description = {
    summary = "A luarocks <-> love wrapper",
@@ -16,11 +17,11 @@ so your entire LÖVE project is self-contained.
 }
 dependencies = {
    "lua ~> 5.1",
-   -- "luarocks >= 2.2.2", Doesn't work on windows
+   "luarocks >= 2.2.2",
+   "argparse >= 0.3",
    "etlua ~> 1.2",
    "luafilesystem ~> 1.6",
-   "datafile >= 0.2",
-   "argparse >= 0.4"
+   "datafile >= 0.1"
 }
 build = {
    type = "builtin",
@@ -42,24 +43,11 @@ build = {
       ["loverocks.commands.purge"]   = "loverocks/commands/purge.lua",
       ["loverocks.commands.search"]  = "loverocks/commands/search.lua",
       ["loverocks.argparse"]         = "loverocks/argparse.lua",
-      ["loverocks.api"]              = "loverocks/api.lua",
    },
    install = {
       bin = {"bin/loverocks"}
    },
    copy_directories = {
       "templates",
-   },
-   platforms = {
-      unix = {
-         modules = {
-            ["loverocks.os"] = "loverocks/os_unix.lua"
-         }
-      },
-      windows = {
-         modules = {
-            ["loverocks.os"] = "loverocks/os_win.lua"
-         }
-      }
    }
 }

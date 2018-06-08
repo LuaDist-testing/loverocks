@@ -1,51 +1,65 @@
 -- load configuration
 local datafile = require 'datafile'
+local log      = require 'loverocks.log'
+local util     = require 'loverocks.util'
 local config = {}
 
-local UNIX_PATH = os.getenv("XDG_CONFIG_HOME")
-if UNIX_PATH then
-	UNIX_PATH = UNIX_PATH .. "/loverocks/"
-else
-	UNIX_PATH = os.getenv("HOME") .. "/.config/loverocks/"
-end
-	
-local WIN_PATH  = "FIXME"
+local home = os.getenv("HOME")
+local xdg_config = os.getenv("XDG_CONFIG_HOME")
+local win_config = os.getenv("APPDATA")
 
-local function apply_config(self, f, path)
-	self.CONFIG = {}
+-- FIXME: home is not a reliable indicator of OS
+local PATH
+if xdg_config then
+	PATH = xdg_config .. "/loverocks"
+elseif home then
+	PATH = home .. "/.config/loverocks"
+elseif win_config then
+	PATH = win_config .. "/loverocks"
+else
+	log:error("No appropriate config file path found.")
+end
+
+function config:open(fname, env)
 	local fn
 	if setfenv then -- lua 5.1
-		fn = assert(loadstring(f:read('*a'), "conf.lua"))
-		setfenv(fn, self.CONFIG)
+		fn, err = loadfile(fname)
+		if not fn then return nil, err end
+		setfenv(fn, env)
 	else -- lua >= 5.2
-		fn = assert(load(f:read('*a'), "conf.lua", 't', self.CONFIG))
+		fn, err = loadfile(fname, 't', env)
+		if not fn then return nil, err end
 	end
 	fn()
+	return env
+end
+
+local function apply_config(self, path)
+	self.CONFIG = {}
+	self:open(path, self.CONFIG)
 	if self.CONFIG.luarocks == nil then
 		log:error("Config file %q must have field 'luarocks'", path)
 	end
 	self.CONFIG.loverocks_config = path
 end
 
-local LUAROCKS_BIN = os.getenv("HOME") .. "/.luarocks/bin"
+local global_rock
+if home then
+	global_rock = "/usr/local/bin/luarocks"
+else
+	global_rock = ([["%s/LuaRocks/2.2/luarocks.bat"]]):format(os.getenv "ProgramFiles") -- installed via install.bat
+end
 
 local command_names = {
-	LUAROCKS_BIN .. "/luarocks", -- most specific
-	"luarocks-5.1",              -- arch linux uses this
+	global_rock,
+	"luarocks-5.1",              -- arch linux installed
 	"luarocks5.1",
 	"luarocks51",
 	"luarocks",                  -- least specific
 }
 
---
--- This definition is identical to the one in util.lua
--- However, since config.lua is intended to sit lower on the dependency chain 
--- it can't use any util functions, so instead we just copy-pasted it here :p
-local function stropen(cli)
-	local f = io.popen(cli, 'r')
-	local s = f:read('*a')
-	f:close()
-	return s
+if home then
+	table.insert(command_names, 1, home .. "/.luarocks/bin/luarocks") -- local rock. not possible on windows
 end
 
 local config_fmt = [[
@@ -81,16 +95,16 @@ local function find_luarocks(self)
 	local bad_luarocks = false
 
 	for _, name in ipairs(command_names) do
-		local help = stropen(name .. " help")
+		local help = util.stropen(name .. " help")
+		-- FIXME: also check for version number. 2.2.2 and up only.
 		local v = help:match("Lua version: ([^%s]+)")
 		local invalid_config = help:match("User%s*:%s*disabled in this LuaRocks installation.")
 
 		if v == "5.1" and invalid_config then
-			bad_luarocks = stropen("which " .. name)
+			bad_luarocks = util.stropen("which " .. name)
 		elseif v == "5.1" then
-			local path = UNIX_PATH
-			local filename = path .. "conf.lua"
-			local ok, err = lfs.mkdir(path)
+			local filename = PATH .. "/conf.lua"
+			local ok, err = util.mkdir_p(PATH)
 			if not ok and not err == "file exists" then
 				error(err)
 			end
@@ -100,6 +114,7 @@ local function find_luarocks(self)
 
 			self.CONFIG.luarocks = name
 			self.CONFIG.loverocks_config = filename
+			log:info("Found a suitable copy of luarocks at %s", self.CONFIG.luarocks)
 			return
 		end
 	end
@@ -112,16 +127,21 @@ local function find_luarocks(self)
 end
 
 function config:load()
-	local file, path = datafile.open("loverocks/conf.lua", 'r', "config")
-	if file then
-		apply_config(self, file, path)
-		file:close()
-	else
-		find_luarocks(self)
+	if not self.CONFIG then
+		local file, path = datafile.open("loverocks/conf.lua", 'r', "config")
+		if file then
+			file:close()
+			apply_config(self, path)
+		else
+			find_luarocks(self)
+		end
+		local ok, err = pcall(require, "loverocks.os")
+		self.CONFIG.os = ok and err or "unix"
 	end
 end
 
 function config:get(var)
+	self:load()
 	return self.CONFIG[var]
 end
 

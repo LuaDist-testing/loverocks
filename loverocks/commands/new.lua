@@ -1,9 +1,7 @@
-local etlua = require 'etlua'
-
-local util = require 'loverocks.util'
-local versions = require 'loverocks.versions'
 local log = require 'loverocks.log'
 local config = require 'loverocks.config'
+local template = require 'loverocks.template'
+local util = require 'loverocks.util'
 
 local new = {}
 
@@ -21,71 +19,21 @@ function new:build(parser)
 		:description "the name of the project"
 end
 
-local function raw_version(s)
-	return string.format("%q", s:gsub("-1$", ""))
-end
-
-local function depstring(s)
-	return ("\"love ~> %s\""):format(s:match("%d+.%d+"))
-end
-
-local function new_env(name, v)
-	return {
-		project_name = name,
-		versions = versions.get(v),
-		raw_version = raw_version,
-		depstring = depstring,
-	}
-end
-
 function is_valid_name(s) -- TODO
 	return true
 end
 
-local function apply_templates(files, env)
-	for name, file in pairs(files) do
-		if type(file) == 'table' then
-			apply_templates(file, env)
-		else
-			local new_name = name:gsub("PROJECT", env.project_name)
-			local d, err = etlua.render(file, env)
-			if not d then
-				log:error(name .. ": " .. err)
-			end
-			files[new_name] = d
-			if new_name ~= name then
-				files[name] = nil
-			end
-		end
-	end
-end
-
-local function template_path(name)
-	local override = config("loverocks_templates")
-	if override then
-		override = override .. "/" .. name
-		local f, err = io.open(override)
-		if f then
-			return override
-		end
-	end
-
-	return util.dpath("templates/" .. name)
-end
-
 function new:run(args)
-	local env = new_env(args.project, args.love_version)
+	local env = template.new_env(args.project, args.love_version)
 	if not is_valid_name(args.project) then
 		log:error("Invalid project name: %q", args.project)
 	end
 
-	local path, err = template_path(args.template)
-	if not path then log:error(err) end
+	local path = log:assert(template.path(args.template))
 
-	log:info("Using template %q", args.template)
-	local files, err = util.slurp(path)
-	if not files then log:error(err) end
-	apply_templates(files, env)
+	log:info("Using template %q", path)
+	local files = assert(util.slurp(path))
+	files = template.apply(files, env)
 
 	local f, err = io.open(env.project_name)
 	if f then
@@ -100,7 +48,7 @@ function new:run(args)
 		f:close()
 	end
 
-	util.spit(files, env.project_name)
+	assert(util.spit(files, env.project_name))
 	log:info("New LOVERocks project installed at %q", env.project_name .. "/")
 end
 

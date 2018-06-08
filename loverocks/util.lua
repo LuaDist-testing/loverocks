@@ -2,7 +2,6 @@ local lfs      = require 'lfs'
 local datafile = require 'datafile'
 
 local log    = require 'loverocks.log'
-local config = require 'loverocks.config'
 
 local util = {}
 
@@ -19,11 +18,15 @@ local function slurp_dir(dir)
 
 	for f in lfs.dir(dir) do
 		if f ~= "." and f  ~= ".." then
-			t[f] = util.slurp(dir .. "/" .. f)
+			t[f] = assert(util.slurp(dir .. "/" .. f))
 		end
 	end
 
 	return t
+end
+
+function util.is_dir(path)
+	return lfs.attributes(path, 'mode') == 'directory'
 end
 
 function util.slurp(path)
@@ -42,7 +45,7 @@ local function spit_file(str, dest)
 	local file, err = io.open(dest, "w")
 	if not file then return nil, err end
 
-	local ok, err = file:write()
+	local ok, err = file:write(str)
 	if not ok then return nil, err end
 
 	local ok, err = file:close()
@@ -53,8 +56,10 @@ end
 
 local function spit_dir(tbl, dest)
 	log:fs("mkdir %s", dest)
-	local ok, err = lfs.mkdir(dest)
-	if not ok then return nil, err end
+	if not util.is_dir(dest) then
+		local ok, err = lfs.mkdir(dest)
+		if not ok then return nil, err end
+	end
 
 	for f, s in pairs(tbl) do
 		if f ~= "." and f  ~= ".." then
@@ -71,8 +76,22 @@ function util.spit(o, dest)
 	if type(o) == 'table' then
 		return spit_dir(o, dest)
 	else
-		return spit_file(o, dest)
+		return assert(spit_file(o, dest))
 	end
+end
+
+function util.get_home()
+    return (os.getenv("HOME") or os.getenv("USERPROFILE"))
+end
+
+function util.clean_path(path)
+	if path:match("^%~/") then
+		path = path:gsub("^%~/", util.get_home() .. "/")
+	end
+	if not path:match("^/") and not path:match("%./") then
+		path = lfs.currentdir()  .. "/" .. path
+	end
+	return path
 end
 
 function util.rm(path)
@@ -93,10 +112,19 @@ function util.rm(path)
 	return os.remove(path)
 end
 
+function util.exists(path)
+	local f, err = io.open(path, 'r')
+	if f then
+		f:close()
+		return true
+	end
+	return nil, err
+end
+
 -- a replacement datafile.path()
 function util.dpath(resource)
 	-- for some reason datafile.path doesn't work
-	local tmpfile, path = datafile.open(resource)
+	local tmpfile, path = datafile.open(resource, 'r')
 	local err = path
 
 	if not tmpfile then
@@ -127,28 +155,35 @@ function util.stropen(cli)
 	return s
 end
 
-local LROCKSTR = [[
-LUAROCKS_CONFIG='rocks/config.lua' %s --tree='rocks' %s
-]]
-function util.luarocks(...)
-	local argstr = table.concat({...}, " ")
-	argstr = LROCKSTR:format(config('luarocks'), argstr)
-	log:fs(argstr)
-
-	return os.execute(argstr)
-end
-
-function util.strluarocks(...)
-	local argstr = table.concat({...}, " ")
-	argstr = LROCKSTR:format(config('luarocks'), argstr)
-	log:fs(argstr)
-
-	return util.stropen(argstr)
-end
-
 -- produce str with magic characters escaped, for pattern-building
 function util.escape_str(s)
-    return (s:gsub('[%-%.%+%[%]%(%)%$%^%%%?%*]','%%%1'))
+	return (s:gsub('[%-%.%+%[%]%(%)%$%^%%%?%*]','%%%1'))
+end
+
+function util.mkdir_p(directory)
+	directory = util.clean_path(directory)
+	local path = nil
+	if directory:sub(2, 2) == ":" then
+		path = directory:sub(1, 2)
+		directory = directory:sub(4)
+	else
+		if directory:match("^/") then
+			path = ""
+		end
+	end
+	for d in directory:gmatch("([^".."/".."]+)".."/".."*") do
+		path = path and path .. "/" .. d or d
+		local mode = lfs.attributes(path, "mode")
+		if not mode then
+			local ok, err = lfs.mkdir(path)
+			if not ok then
+				return false, err
+			end
+			elseif mode ~= "directory" then
+				return false, path.." is not a directory"
+			end
+		end
+		return true
 end
 
 return util

@@ -1,4 +1,4 @@
-local argparse = require 'argparse'
+local argparse = require 'loverocks.argparse'
 local commands = require 'loverocks.commands'
 local config   = require 'loverocks.config'
 local log      = require 'loverocks.log'
@@ -11,30 +11,41 @@ Configuration:
 ]]
 
 local function main(...)
+	local version = "Loverocks " .. (require 'loverocks.version')
+
 	config:load()
 	local parser = argparse "loverocks" {
-		description = "A wrapper to make luarocks and love play nicely.",
+		description = version .. ", a wrapper to make luarocks and love play nicely.",
 		epilog = string.format(config_msg,
 		                       config('luarocks'),
 		                       config('loverocks_config'))
 	}
-	commands.help:add_command("main", parser)
+	local help = commands.modules.help
+	help:add_command("main", parser)
 
-	for name, cmd in pairs(commands) do
+	for _, name in pairs(commands.names) do
+		local cmd = commands.modules[name]
 		local cmd_parser = parser:command(name)
-		commands.help:add_command(name, cmd_parser)
+
+		help:add_command(name, cmd_parser)
 		cmd:build(cmd_parser)
 	end
 
+	parser:flag "--version"
+		:description "Print version info."
+		:action(function()
+			print(version)
+			os.exit(0)
+		end)
 	parser:flag "-v" "--verbose"
 		:description "Use verbose output."
 		:action(function()
-			log.use.fs = true
+			log:verbose()
 		end)
 	parser:flag "-q" "--quiet"
-		:description "Silence info messages."
+		:description "Suppress output. also enables -c"
 		:action(function()
-			log.use.info = false
+			log:quiet()
 		end)
 	parser:flag "-c" "--confirm"
 		:description "Confirm without prompting. useful for scripts."
@@ -42,16 +53,11 @@ local function main(...)
 			log.use.ask = false
 		end)
 
-	local args = {...}
-	local B = parser:parse(args)
+	local B = parser:parse{...}
 
-	if B.lua then
-		return commands.lua:run(args) -- pass raw args instead of parsed args
-	else
-		for name, cmd in pairs(commands) do
-			if B[name] then
-				return cmd:run(B)
-			end
+	for name, cmd in pairs(commands.modules) do
+		if B[name] then
+			return cmd:run(B)
 		end
 	end
 end
